@@ -145,19 +145,5 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 📬 Contact
 
-**Your Name** — your.email@example.com  
-Project Link: [https://github.com/yourusername/time-record-system](https://github.com/yourusername/time-record-system)
-
----
-
-## ✅ Additional Recommendations
-
-- Create a `screenshots` folder and add actual screenshots or a demo GIF  
-- Add a `requirements.txt` file with:
-  ```
-  tkcalendar==1.6.1
-  matplotlib==3.5.1
-  pillow==9.0.1
-  requests==2.27.1
-  ```
-- Add a `LICENSE` file if you’re open-sourcing the project
+Jerome Pedrosa — jeromepedrosa3@gmail.com  
+Project Link: [https://github.com/smolrome/DailyTimeRecord](https://github.com/smolrome/DailyTimeRecord)

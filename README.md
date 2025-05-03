@@ -139,7 +139,7 @@ Contributions are welcome! Please follow these steps:
 
 ## 📜 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the MIT License. See [LICENSE](https://github.com/smolrome/DailyTimeRecord/blob/main/LICENSE) for more information.
 
 ---
 

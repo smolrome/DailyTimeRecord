@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import requests
 from PIL import Image, ImageTk
+import sys
+import time
 
 class AdvancedTimeRecordApp:
     def __init__(self, root):
@@ -19,12 +21,19 @@ class AdvancedTimeRecordApp:
         self.root.title("Advanced Time Record System")
         self.root.geometry("1400x900")
         self.root.state('zoomed')  # Start maximized
-        
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+        # CLI indicator
+        print("Starting the Advanced Time Record System...")
+
+        # GUI indicator (Splash screen or status message)
+        self.show_startup_message()
+
         # Security and authentication
         self.current_user = None
         self.users_file = "users.dat"
         self.backup_url = "https://your-backup-service.com/api"  # Replace with actual service
-        
+
         # Settings
         self.settings = {
             'work_hours_per_day': 8,
@@ -34,15 +43,27 @@ class AdvancedTimeRecordApp:
             'dark_mode': False,
             'notifications': True
         }
-        
+
         # Initialize data structures
         self.initialize_data()
-        
+
         # UI Theme
         self.setup_theme()
-        
+
         # Create login screen first
         self.create_login_screen()
+
+        # CLI indicator for running
+        print("Advanced Time Record System is now running.")
+
+    def show_startup_message(self):
+        """Display a startup message in the GUI."""
+        startup_label = tk.Label(self.root, text="Starting the Advanced Time Record System...",
+                                 font=("Arial", 14), bg="#f0f8ff", fg="#003366")
+        startup_label.place(relx=0.5, rely=0.5, anchor="center")
+        self.root.update_idletasks()  # Force the UI to update immediately
+        time.sleep(2)  # Simulate a delay for the startup message
+        startup_label.destroy()  # Remove the startup message
     
     def initialize_data(self):
         """Initialize all data structures"""
@@ -186,7 +207,7 @@ class AdvancedTimeRecordApp:
         
         # Load settings
         settings_file = f"{user_dir}/settings.json"
-        if os.path.exists(settings_file):
+        if (os.path.exists(settings_file)):
             with open(settings_file, "r") as f:
                 self.settings.update(json.load(f))
         
@@ -1263,7 +1284,22 @@ class AdvancedTimeRecordApp:
         if os.path.exists(monthly_file):
             with open(monthly_file, "r") as f:
                 self.monthly_data = json.load(f)
-    
+                
+    def on_close(self):
+        """Handle application close event."""
+        if hasattr(self, 'clock_update_id') and self.clock_update_id:
+            self.root.after_cancel(self.clock_update_id)  # Cancel the scheduled clock update
+
+        # CLI progress indicator
+        print("Closing the program", end="", flush=True)
+        for _ in range(5):  # Simulate a 5-step progress
+            print(".", end="", flush=True)
+            time.sleep(0.5)  # Delay for half a second
+        print(" Done!")
+
+        print("Program is closing...")
+        self.root.destroy()  # Close the application
+        
 if __name__ == "__main__":
     root = tk.Tk()
     app = AdvancedTimeRecordApp(root)

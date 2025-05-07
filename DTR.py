@@ -23,6 +23,8 @@ class AdvancedTimeRecordApp:
         self.root.state('zoomed')  # Start maximized
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self._setup_cli_messages()
+        self.start_time = datetime.now()
+        self._setup_signal_handlers()
 
         # Security and authentication
         self.current_user = None
@@ -49,6 +51,45 @@ class AdvancedTimeRecordApp:
         self.create_login_screen()
         
     # CLI MESSAGES
+    def _setup_signal_handlers(self):
+        """Handle Ctrl+C properly"""
+        import signal
+        signal.signal(signal.SIGINT, self._handle_ctrl_c)
+
+    def _handle_ctrl_c(self, signum, frame):
+        """Safer Ctrl+C handling"""
+        if not hasattr(self, '_shutdown_initiated'):
+            self._print_cli_message("\nCtrl+C detected - Initiating shutdown", "yellow")
+            self.root.after(100, self.on_close)  # Schedule in Tkinter's event loop
+    
+    def on_close(self):
+        """Safe shutdown handler that prevents double-destruction"""
+        if not hasattr(self, '_shutdown_initiated'):
+            self._shutdown_initiated = True  # Prevention flag
+            
+            # CLI feedback
+            self._print_cli_message("SHUTDOWN INITIATED", "yellow")
+            
+            # Cancel pending callbacks
+            if hasattr(self, 'clock_update_id'):
+                self.root.after_cancel(self.clock_update_id)
+            
+            # Save data if logged in
+            if self.current_user:
+                self.save_records()
+                self._print_cli_message("Data saved successfully", "green")
+            
+            # Safe destruction sequence
+            try:
+                if self.root.winfo_exists():
+                    self.root.quit()
+                    self.root.destroy()
+            except tk.TclError:
+                pass  # Already destroyed
+            
+            # Force exit
+            os._exit(0)
+    
     def _setup_cli_messages(self):
         """Initialize CLI message handlers."""
         self._print_cli_message("SYSTEM STARTING", "blue")
@@ -303,7 +344,7 @@ class AdvancedTimeRecordApp:
         file_menu.add_command(label="Settings", command=self.open_settings)
         file_menu.add_separator()
         file_menu.add_command(label="Logout", command=self.logout)
-        file_menu.add_command(label="Exit", command=self.root.quit)
+        file_menu.add_command(label="Exit", command=self.on_close)
         menubar.add_cascade(label="File", menu=file_menu)
         
         # Reports menu
@@ -718,12 +759,13 @@ class AdvancedTimeRecordApp:
         self.root.update_idletasks()
     
     def clear_window(self):
-        """Clear all widgets from the root window."""
-        # Cancel the clock update if it is scheduled
-        if hasattr(self, 'clock_update_id') and self.clock_update_id:
+        """Safely clear all widgets and cancel pending callbacks"""
+        # Cancel clock updates
+        if hasattr(self, 'clock_update_id'):
             self.root.after_cancel(self.clock_update_id)
-            self.clock_update_id = None
-    
+            del self.clock_update_id
+        
+        # Destroy all widgets
         for widget in self.root.winfo_children():
             widget.destroy()
     
@@ -1294,25 +1336,27 @@ class AdvancedTimeRecordApp:
     
     def update_clock(self):
         """Update the clock display"""
-        now = datetime.now()
-        current_time = now.strftime("%I:%M:%S %p")
-        self.clock_label.config(text=current_time)
+        if not self.root.winfo_exists():
+            
+            now = datetime.now()
+            current_time = now.strftime("%I:%M:%S %p")
+            self.clock_label.config(text=current_time)
+            
+            # Update worked time if clocked in
+            if self.clock_in_time and not self.clock_out_time:
+                if self.break_start_time and not self.break_end_time:
+                    # On break, don't count this time
+                    pass
+                else:
+                    worked_time = now - self.clock_in_time
+                    # Subtract break times
+                    for break_session in self.break_sessions:
+                        if break_session['end']:
+                            worked_time -= (break_session['end'] - break_session['start'])
+                    self.total_worked_label.config(text=f"Total Worked: {str(worked_time).split('.')[0]}")
         
-        # Update worked time if clocked in
-        if self.clock_in_time and not self.clock_out_time:
-            if self.break_start_time and not self.break_end_time:
-                # On break, don't count this time
-                pass
-            else:
-                worked_time = now - self.clock_in_time
-                # Subtract break times
-                for break_session in self.break_sessions:
-                    if break_session['end']:
-                        worked_time -= (break_session['end'] - break_session['start'])
-                self.total_worked_label.config(text=f"Total Worked: {str(worked_time).split('.')[0]}")
-    
-        # Schedule the next clock update
-        self.clock_update_id = self.root.after(1000, self.update_clock)
+            # Schedule the next clock update
+            self.clock_update_id = self.root.after(1000, self.update_clock)
 
     def load_summaries(self):
         """Load weekly and monthly summary data"""
@@ -1329,23 +1373,16 @@ class AdvancedTimeRecordApp:
         if os.path.exists(monthly_file):
             with open(monthly_file, "r") as f:
                 self.monthly_data = json.load(f)
-                
-    # def on_close(self):
-    #     """Handle application close event."""
-    #     if hasattr(self, 'clock_update_id') and self.clock_update_id:
-    #         self.root.after_cancel(self.clock_update_id)  # Cancel the scheduled clock update
-
-    #     # CLI progress indicator
-    #     print("Closing the program", end="", flush=True)
-    #     for _ in range(5):  # Simulate a 5-step progress
-    #         print(".", end="", flush=True)
-    #         time.sleep(0.5)  # Delay for half a second
-    #     print(" Done!")
-
-    #     print("Program is closing...")
-    #     self.root.destroy()  # Close the application
         
 if __name__ == "__main__":
     root = tk.Tk()
     app = AdvancedTimeRecordApp(root)
-    root.mainloop()
+    
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        if hasattr(app, '_handle_ctrl_c'):
+            app._handle_ctrl_c(None, None)
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        os._exit(1)

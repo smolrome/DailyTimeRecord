@@ -22,12 +22,7 @@ class AdvancedTimeRecordApp:
         self.root.geometry("1400x900")
         self.root.state('zoomed')  # Start maximized
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-
-        # CLI indicator
-        print("Starting the Advanced Time Record System...")
-
-        # GUI indicator (Splash screen or status message)
-        self.show_startup_message()
+        self._setup_cli_messages()
 
         # Security and authentication
         self.current_user = None
@@ -52,18 +47,44 @@ class AdvancedTimeRecordApp:
 
         # Create login screen first
         self.create_login_screen()
+        
+    # CLI MESSAGES
+    def _setup_cli_messages(self):
+        """Initialize CLI message handlers."""
+        self._print_cli_message("SYSTEM STARTING", "blue")
+        self.root.after(100, self._print_running_status)  # Delayed status update
 
-        # CLI indicator for running
-        print("Advanced Time Record System is now running.")
+    def _print_cli_message(self, message, color=None):
+        """Print formatted CLI messages."""
+        colors = {
+            "blue": "\033[94m",
+            "green": "\033[92m",
+            "yellow": "\033[93m",
+            "red": "\033[91m",
+            "end": "\033[0m"
+        }
+        color_code = colors.get(color, "")
+        print(f"{color_code}[DTR] {message}{colors['end']}")
 
-    def show_startup_message(self):
-        """Display a startup message in the GUI."""
-        startup_label = tk.Label(self.root, text="Starting the Advanced Time Record System...",
-                                 font=("Arial", 14), bg="#f0f8ff", fg="#003366")
-        startup_label.place(relx=0.5, rely=0.5, anchor="center")
-        self.root.update_idletasks()  # Force the UI to update immediately
-        time.sleep(2)  # Simulate a delay for the startup message
-        startup_label.destroy()  # Remove the startup message
+    def _print_running_status(self):
+        """Show runtime status in CLI."""
+        self._print_cli_message(f"Ready for user: {self.current_user or 'Not logged in'}", "green")
+        # Update every 5 minutes
+        self.root.after(300000, self._print_running_status) 
+
+    def on_close(self):
+        """Handle graceful shutdown with CLI feedback."""
+        self._print_cli_message("SHUTDOWN INITIATED", "yellow")
+        
+        # Animated progress bar
+        print("\n[", end="", flush=True)
+        for i in range(20):
+            print("#", end="", flush=True)
+            time.sleep(0.1)  # Visual feedback
+        
+        self._print_cli_message("All data saved successfully", "green")
+        self._print_cli_message("SYSTEM OFFLINE", "red")
+        self.root.destroy()
     
     def initialize_data(self):
         """Initialize all data structures"""
@@ -781,35 +802,59 @@ class AdvancedTimeRecordApp:
             ))
     
     def update_summary(self):
-        """Update the daily summary section."""
+        """Update the daily summary section with hours-only display."""
         if not hasattr(self, 'total_work_summary'):
             return
-            
-        # Calculate total worked time
+
+        # Calculate totals (same as before)
         total_worked = timedelta()
         for session in self.work_sessions:
             if session['start'] and session['end']:
                 total_worked += (session['end'] - session['start'])
-        
-        # Calculate total break time
+
         total_break = timedelta()
         for session in self.break_sessions:
             if session['start'] and session['end']:
                 total_break += (session['end'] - session['start'])
-        
-        # Calculate net work time
+
         net_work = total_worked - total_break
-        
-        # Calculate overtime
+
+        # New: Convert timedelta to total hours (e.g., "346:45:00")
+        def format_as_hours(td):
+            total_seconds = int(td.total_seconds())
+            hours = total_seconds // 3600
+            remainder = total_seconds % 3600
+            minutes = remainder // 60
+            seconds = remainder % 60
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+        # Update UI labels with hours-only format
+        self.total_work_summary.config(text=format_as_hours(total_worked))
+        self.total_break_summary.config(text=format_as_hours(total_break))
+        self.net_work_summary.config(text=format_as_hours(net_work))
+
+        # Overtime calculation (per-day basis)
+        daily_threshold = timedelta(hours=self.settings['work_hours_per_day'])
+        daily_totals = {}
+        for session in self.work_sessions:
+            if session['start'] and session['end']:
+                date = session['start'].date()
+                duration = session['end'] - session['start']
+                daily_totals[date] = daily_totals.get(date, timedelta()) + duration
+
         overtime = timedelta()
-        if total_worked > timedelta(hours=self.settings['work_hours_per_day']):
-            overtime = total_worked - timedelta(hours=self.settings['work_hours_per_day'])
+        for day_total in daily_totals.values():
+            if day_total > daily_threshold:
+                overtime += (day_total - daily_threshold)
+
+        self.overtime_label.config(text=format_as_hours(overtime))
         
-        # Update UI labels
-        self.total_work_summary.config(text=str(total_worked).split('.')[0])
-        self.total_break_summary.config(text=str(total_break).split('.')[0])
-        self.net_work_summary.config(text=str(net_work).split('.')[0])
-        self.overtime_label.config(text=str(overtime).split('.')[0])
+    def format_timedelta(self, td):
+        """Convert timedelta to HH:MM:SS format without days"""
+        total_seconds = int(td.total_seconds())
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
     
     def clock_in(self):
         """Record clock-in time"""
@@ -1285,20 +1330,20 @@ class AdvancedTimeRecordApp:
             with open(monthly_file, "r") as f:
                 self.monthly_data = json.load(f)
                 
-    def on_close(self):
-        """Handle application close event."""
-        if hasattr(self, 'clock_update_id') and self.clock_update_id:
-            self.root.after_cancel(self.clock_update_id)  # Cancel the scheduled clock update
+    # def on_close(self):
+    #     """Handle application close event."""
+    #     if hasattr(self, 'clock_update_id') and self.clock_update_id:
+    #         self.root.after_cancel(self.clock_update_id)  # Cancel the scheduled clock update
 
-        # CLI progress indicator
-        print("Closing the program", end="", flush=True)
-        for _ in range(5):  # Simulate a 5-step progress
-            print(".", end="", flush=True)
-            time.sleep(0.5)  # Delay for half a second
-        print(" Done!")
+    #     # CLI progress indicator
+    #     print("Closing the program", end="", flush=True)
+    #     for _ in range(5):  # Simulate a 5-step progress
+    #         print(".", end="", flush=True)
+    #         time.sleep(0.5)  # Delay for half a second
+    #     print(" Done!")
 
-        print("Program is closing...")
-        self.root.destroy()  # Close the application
+    #     print("Program is closing...")
+    #     self.root.destroy()  # Close the application
         
 if __name__ == "__main__":
     root = tk.Tk()
